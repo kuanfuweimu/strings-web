@@ -17,6 +17,7 @@ STRINGS 在浏览器中模拟流动、生长与聚散的线条，用于投影内
 - **MIDI 输入**：预置 Launch Control XL 3 Mode 16 映射，支持 MIDI 学习及本地保存。
 - **手柄控制**：通过标准 Gamepad 映射读取 DualSense 等设备，控制镜头及播放状态。
 - **两种录制方式**：浏览器 WebM 实时录制，或通过 FFmpeg 逐帧导出 MP4。
+- **TouchDesigner 实时接入**：Web Render TOP 内运行 3840×2160 画面，浏览器控制面板通过本地服务跨进程控制。
 
 ![控制面板与控制器映射示意](docs/preview/control-panel.png)
 
@@ -47,6 +48,32 @@ node server.js
 Windows 下也可直接双击 **`start.bat`**。脚本会启动本地服务，并用独立浏览器配置打开两个窗口。浏览器配置保存在本地 `browser-profile/`。
 
 使用本地服务访问页面，不要直接双击 HTML 文件。输出与控制面板通过同源 `BroadcastChannel` 通信；`localhost` 和 `127.0.0.1` 不应混用。
+
+## TouchDesigner 实时接入
+
+启动或重启新版 `node server.js`，打开 **<http://localhost:8787/touchdesigner.html>** 查看连接说明，也可以从控制面板点击“TouchDesigner 控制”。
+
+1. 在 TD 新建 **Web Render TOP**，将 **URL or File** 设为 `http://localhost:8787/?td=1`。
+2. 将 **Active** 和 **Cook Always** 打开；Common 页 **Output Resolution** 选 **Custom Resolution**，宽高填 **3840 / 2160**，关闭 **Use Global Res Multiplier**。
+3. 接一个 **Null TOP**，命名 `null_strings`，节点颜色设为 `#2F59AD`。将它接到后续合成、投影或 Movie File Out TOP。
+4. 在 Chrome / Edge 打开 **<http://localhost:8787/control.html?td=1>**。看到“TD 实时输出 · 3840×2160”后，即可用面板、MIDI 或手柄控制。
+
+```text
+Chrome / Edge 控制面板 ── 本地参数通道 ── Web Render TOP → null_strings → 投影 / 合成 / 录制
+                                           3840×2160
+```
+
+- **画面如何进入 TD**：Web Render TOP 的 Chromium 运行本项目 WebGL2 视觉程序，将渲染结果作为 TOP 使用；本地 HTTP/SSE 通道只传控制与状态，不传 JPEG 视频帧。不需要 npm 依赖。
+- **与浏览器输出的关系**：这是在 TD 内独立渲染，不是 Chrome 窗口捕获，也不是 Spout／NDI 发送器。普通浏览器模式仍用 BroadcastChannel，TD 模式使用独立通道；两边参数互不干扰，画面也不保证逐帧一致。
+- **一个服务对应一个 TD 输出**：不要在 Chrome 同时打开 `/?td=1` 预览。需要复用同一画面时，在 TD 内引用同一个 `null_strings`；第二个 TD 渲染端会被拒绝，避免多路状态争抢。
+- **分辨率与帧率**：TD 模式画布固定为 3840×2160，TOP 也需按上述设置保持 4K，并使用允许该分辨率的 TD 许可证。实际帧率取决于 GPU、密度和工程负载，未承诺 4K60。无需打开普通浏览器输出窗口，可减少重复 GPU 负载。
+- **纯画面输出**：黑底、不显示 HUD。TD 面板禁用浏览器 WebM 下载；在 TD 内录制，或另用项目原有的离线 MP4 导出。
+- **断线状态**：服务断开后面板提示重连；连接恢复后继续收发，断线期间的按钮指令不补发。TD 重载页面会从默认参数重新开始。
+- **接不上时**：先确认新版服务已启动、URL 和端口一致、只有一个 TD 输出；保持 TD 时间线播放，并让 TOP 被下游使用或打开 Viewer Active。查看 Web Render TOP 的 Info DAT 错误，确认其 Chromium 支持 WebGL2 与 `EXT_color_buffer_float`。连接成功仅证明参数通道工作，TOP 最终尺寸还需在 TD 中确认。
+
+参数传输、消息顺序、掉线重连、重复输出限制及脚本语法已有自动化测试。实际 TouchDesigner 渲染、设备输入与 4K 性能仍需在目标 TD 版本和硬件上验收。
+
+官方接收端说明：[Derivative — Web Render TOP](https://docs.derivative.ca/Web_Render_TOP)。
 
 ## 场景
 
@@ -156,13 +183,23 @@ strings-web/
 ├── index.html       # WebGL2 模拟、渲染、场景与视频帧输出
 ├── control.html     # 独立控制面板、MIDI 与手柄映射
 ├── server.js        # 本地 HTTP 服务和 FFmpeg 编码入口
+├── td-live-server.js # TD 参数与状态中转，不传视频帧
+├── td-channel.js     # 浏览器 / TD Chromium 跨进程连接
+├── touchdesigner.html # TD 连接说明与控制入口
 ├── start.bat        # Windows 启动入口
 ├── start.ps1        # 启动服务及双窗口
 ├── export.ps1       # 离线 MP4 导出入口
+├── tests/           # TD 实时通道测试
 └── docs/            # 控制器说明、映射图与项目预览
 ```
 
 `out/` 导出视频、`shots/` 开发测试素材、`browser-profile/` 浏览器个人数据均不纳入 Git。本仓库仅包含网页工程。
+
+运行 TD 通道测试（Node.js 18+，无需安装依赖）：
+
+```sh
+node --test tests/td-live.test.js
+```
 
 ## 使用说明
 

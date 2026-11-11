@@ -16,6 +16,7 @@
 <canvas id="c"></canvas>
 <div id="hud"></div>
 <div id="err"></div>
+<script src="td-channel.js"></script>
 <script>
 'use strict';
 const q = new URLSearchParams(location.search);
@@ -23,6 +24,7 @@ const ROWS = 10000, COLS = 4, MAXN = ROWS*COLS, BASE = 4000;   // density 1 = BA
 const N = MAXN;
 const SEG = +(q.get('seg') || 128);       // points per string
 const RENDER = q.get('render') === '1';   // offline export mode (needs server.js)
+const TD = q.get('td') === '1' && !RENDER;
 
 const canvas = document.getElementById('c');
 const hud = document.getElementById('hud');
@@ -231,7 +233,10 @@ function setSize(w,h){
   const mk=(d)=>target(Math.max(2,w>>d),Math.max(2,h>>d),gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,gl.LINEAR);
   scene=mk(0); bl=[1,2,3].map(d=>[mk(d),mk(d)]);
 }
-function resize(){ const dpr=Math.min(window.devicePixelRatio||1,2); setSize(Math.max(2,Math.round(innerWidth*dpr)),Math.max(2,Math.round(innerHeight*dpr))); }
+function resize(){
+  if(TD){ setSize(3840,2160); return; }
+  const dpr=Math.min(window.devicePixelRatio||1,2); setSize(Math.max(2,Math.round(innerWidth*dpr)),Math.max(2,Math.round(innerHeight*dpr)));
+}
 
 function lookAt(e,c){ let z=[e[0]-c[0],e[1]-c[1],e[2]-c[2]]; let l=Math.hypot(...z); z=z.map(v=>v/l);
   let x=[z[2],0,-z[0]]; l=Math.hypot(...x)||1; x=x.map(v=>v/l);
@@ -293,6 +298,7 @@ function draw(){
 // ---------- live mode ----------
 let rec=null;
 function toggleRec(){
+  if(TD) return; // Record the incoming TOP in TouchDesigner instead.
   if(rec){ rec.stop(); rec=null; return; }
   const chunks=[]; rec=new MediaRecorder(canvas.captureStream(60),{mimeType:'video/webm;codecs=vp9',videoBitsPerSecond:40e6});
   rec.ondataavailable=e=>chunks.push(e.data);
@@ -300,7 +306,7 @@ function toggleRec(){
   rec.start();
 }
 const fullscreen=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
-const openPanel=()=>window.open('control.html','strings-control','width=1100,height=960');
+const openPanel=()=>window.open('control.html'+(TD?'?td=1':''),'strings-control'+(TD?'-td':''),'width=1100,height=960');
 addEventListener('keydown',e=>{
   if(e.key>='1'&&e.key<=String(SCENES.length)){ go(+e.key-1); G.auto=false; }
   else if(e.key===' '){ G.auto=!G.auto; e.preventDefault(); }
@@ -317,10 +323,10 @@ canvas.addEventListener('pointermove',e=>{ if(e.buttons&1){ share('yaw',G.yaw-e.
 canvas.addEventListener('wheel',e=>{ share('camD',Math.max(.15,Math.min(3,G.camD*Math.exp(e.deltaY*.001)))); e.preventDefault(); },{passive:false});
 
 let bc=null;
-try{ bc=new BroadcastChannel('strings'); }catch(e){}
+try{ bc=TD?new TDChannel('output'):new BroadcastChannel('strings'); }catch(e){}
 const sendState=()=>bc&&bc.postMessage({t:'state',cur,fps:Math.round(fps),G,names:SCENES.map(s=>s.name),n:active(),seg:SEG,w:W,h:H,rec:!!rec,pad:padName,left:Math.max(0,G.dur-sceneT|0)});
 if(bc) bc.onmessage=ev=>{ const m=ev.data||{};
-  if(m.t==='g'&&m.k in G) G[m.k]=m.v;
+  if(m.t==='g'&&Object.hasOwn(G,m.k)) G[m.k]=m.v;
   else if(m.t==='camreset') Object.assign(G,CAM0);
   else if(m.t==='black') G.dim=G.dim<.01?1:0;
   else if(m.t==='scene'){ go(m.i); if(m.hold) G.auto=false; }
@@ -337,7 +343,7 @@ function pollPad(){
   if(gp&&bc&&frame%2===0) bc.postMessage({t:'padraw',id:gp.id,a:[...gp.axes],b:gp.buttons.map(x=>x.value)});
 }
 
-let last=performance.now();
+let last=performance.now(), lastStateSent=0;
 function tick(now){
   requestAnimationFrame(tick);
   resize();
@@ -348,8 +354,8 @@ function tick(now){
   dimNow+=(G.dim-dimNow)*(1-Math.exp(-dt/.6));
   if(G.speed>0) stepSim(dt*G.speed);
   draw();
-  hud.style.opacity=G.hud?1:0;
-  if(frame%3===0) sendState();
+  hud.style.opacity=!TD&&G.hud?1:0;
+  if(TD ? now-lastStateSent>=100 : frame%3===0){ sendState(); lastStateSent=now; }
   if(frame%15===0){
     hud.innerHTML='<b>'+(cur+1)+' · '+SCENES[cur].name+'</b> '+(G.auto?'· auto '+Math.max(0,G.dur-sceneT|0)+'s':'· hold')+(rec?' · <b style="color:#f55">REC</b>':'')+
       '<br>'+active()+' strings × '+SEG+' · '+W+'×'+H+' · '+fps.toFixed(0)+' fps<br>1–9 scene · ←/→ · space auto · F fullscreen · C control panel · R record · H hide';

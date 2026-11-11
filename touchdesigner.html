@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STRINGS · TouchDesigner 实时输出</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0c0c0c;color:#eee;font:16px/1.7 system-ui,"Microsoft YaHei",sans-serif}
+main{max-width:820px;margin:auto;padding:64px 24px}h1{font-size:32px;line-height:1.25;font-weight:550}h2{font-size:21px;margin-top:36px;font-weight:550}
+p,li{color:#bbb}a{color:#eee}code,input{font-family:Consolas,monospace}input{width:100%;padding:14px;background:#181818;color:#fff;border:1px solid #444;border-radius:6px;font-size:15px}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}button,.button{font:inherit;padding:10px 16px;border:1px solid #555;border-radius:6px;background:#222;color:#eee;text-decoration:none;cursor:pointer}
+.button{background:#eee;color:#111}table{border-collapse:collapse;width:100%}td{padding:10px;border-bottom:1px solid #333}td:first-child{width:45%}#copyStatus{min-height:24px;font-size:13px}
+</style></head>
+<body><main>
+<h1>实时接入 TouchDesigner</h1>
+<p>让 STRINGS 在 Web Render TOP 内运行，输出纯画面的 4K 纹理。用浏览器里的面板、MIDI 或手柄控制它，再接入你的投影、合成或录制网络。</p>
+<h2>1. 保持本地服务运行</h2>
+<p>在项目目录运行 <code>node server.js</code>。如果服务是在更新前启动的，请先结束旧服务再重启。本页面及控制面板都通过这个服务打开。</p>
+<h2>2. 配置 Web Render TOP</h2>
+<p>在 TouchDesigner 新建一个 <strong>Web Render TOP</strong>，将下面地址复制到 <strong>URL or File</strong>。一个服务只运行一个 TD 输出；不要同时在 Chrome 打开该输出地址。</p>
+<input id="url" aria-label="Web Render TOP 地址" readonly>
+<div class="actions"><button id="copy">复制 TD 输出地址</button><a class="button" href="control.html?td=1" target="_blank">打开 TD 控制面板</a></div><div id="copyStatus" role="status"></div>
+<table><tr><td>Active</td><td>On</td></tr><tr><td>Cook Always</td><td>On</td></tr><tr><td>Output Resolution</td><td>Custom Resolution</td></tr><tr><td>Resolution W / H</td><td>3840 / 2160</td></tr><tr><td>Use Global Res Multiplier</td><td>Off</td></tr></table>
+<p>需要允许 4K 输出的 TouchDesigner 许可证。TD 实际输出尺寸也必须是 3840×2160；仅网页内部画布为 4K 并不能绕过 TOP 或许可证的分辨率限制。</p>
+<h2>3. 接到你的输出网络</h2>
+<p><code>Web Render TOP → Null TOP → 后续合成／投影输出</code></p>
+<p>将 Null 命名为 <code>null_strings</code>，节点颜色设为 <code>#2F59AD</code>。保持时间线播放、输出节点被使用或 Viewer Active，防止 TD 停止烹饪。控制面板出现“TD 实时输出 · 3840×2160”后即可切换场景、调节参数。</p>
+<h2>画面与连接</h2>
+<p>这是 TD 内独立渲染的实时画面，不是 Chrome 窗口的像素复制，也不是 Spout／NDI 发送器。网页与 TD 仅传控制参数和状态，没有 JPEG 视频传输；普通浏览器控制与 TD 控制互相独立。输出为黑底，HUD 保持隐藏。</p>
+<p>实际帧率取决于显卡、密度、TD 的 Chromium 版本及工程负载。请先检查 Web Render TOP 的 Info DAT 错误、WebGL2 和 <code>EXT_color_buffer_float</code> 支持。掉线时面板会提示，连接恢复后继续收发；旧按钮命令不会补发。若一直等待，检查是否有重复 TD 输出或旧版服务。</p>
+<p>在 TD 中接 Movie File Out TOP 录制。项目原有逐帧 MP4 导出仍可使用；TD 模式不触发浏览器下载。</p>
+<p><a href="https://docs.derivative.ca/Web_Render_TOP" target="_blank" rel="noreferrer">Web Render TOP 官方文档</a> · <a href="control.html">返回浏览器控制</a></p>
+</main><script>
+const url=document.getElementById('url');url.value=new URL('/?td=1',location.href).href;
+document.getElementById('copy').onclick=async()=>{
+  try{await navigator.clipboard.writeText(url.value);document.getElementById('copyStatus').textContent='已复制，粘贴到 Web Render TOP 的 URL or File。';}
+  catch{url.select();document.getElementById('copyStatus').textContent='请按 Ctrl+C 复制选中的地址。';}
+};
+</script></body></html>

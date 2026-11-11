@@ -34,6 +34,8 @@
 <div id="L">
 <h1>STRINGS · CONTROL</h1>
 <div id="status">等待输出窗口… (先打开 index.html)</div>
+<p id="tdLinks"><a href="control.html">浏览器控制</a> · <a href="control.html?td=1">TouchDesigner 控制</a> · <a href="touchdesigner.html" target="_blank">连接说明</a></p>
+<style>#tdLinks{font-size:12px;margin:0 0 18px} #tdLinks a{color:#ccc} button:disabled{opacity:.4;cursor:default}</style>
 
 <h2>片段 Scene</h2>
 <div id="scenes"></div>
@@ -63,9 +65,24 @@
 <div id="dsinfo" class="info"></div>
 </div>
 
+<script src="td-channel.js"></script>
 <script>
-const bc=new BroadcastChannel('strings');
+const TD=new URLSearchParams(location.search).get('td')==='1';
+const bc=TD?new TDChannel('control'):new BroadcastChannel('strings');
 const $=id=>document.getElementById(id);
+let stateSeenAt=0;
+if(TD){
+  document.title='STRINGS · TouchDesigner control';
+  document.querySelector('h1').textContent='STRINGS · TouchDesigner';
+  $('status').textContent='等待 TouchDesigner 的 Web Render TOP…';
+  $('hud').disabled=$('rec').disabled=true;
+  $('rec').textContent='请在 TD 中录制';
+  bc.onstatus=s=>{ if(s!=='connected'){ stateSeenAt=0; $('status').textContent='TD 连接中断，正在重连…'; } };
+  setInterval(()=>{
+    if(!stateSeenAt || performance.now()-stateSeenAt>3000)
+      $('status').textContent=bc.ready?'本地服务已连接 · 等待 TD 画面更新…':'本地服务未连接 · 请启动或重启 node server.js';
+  },1000);
+}
 const send=(k,v)=>bc.postMessage({t:'g',k,v});
 let G=null, built=false, curScene=0;
 const SL={
@@ -111,7 +128,7 @@ let relay=null, lastState=null;
 bc.onmessage=ev=>{ const m=ev.data; if(!m) return;
   if(m.t==='padraw'){ relay={...m,ts:now()}; return; }
   if(m.t==='g'&&inputs[m.k]){ VAL[m.k]=m.v; touched[m.k]=now(); show(m.k); lastChange={k:m.k,v:m.v,src:'输出窗口鼠标',t:now()}; return; }
-  if(m.t!=='state') return; G=m.G; curScene=m.cur; lastState=m;
+  if(m.t!=='state') return; stateSeenAt=performance.now(); G=m.G; curScene=m.cur; lastState=m;
   if(!built){ built=true;
     m.names.forEach((n,i)=>{ const b=document.createElement('button'); b.textContent=(i+1)+' · '+n; b.onclick=()=>bc.postMessage({t:'scene',i,hold:true}); $('scenes').appendChild(b); });
     for(const k in inputs){ inputs[k].def=G[k]; VAL[k]=G[k]; show(k); }
@@ -122,7 +139,7 @@ bc.onmessage=ev=>{ const m=ev.data; if(!m) return;
   [...$('scenes').children].forEach((b,i)=>b.classList.toggle('on',i===m.cur));
   $('auto').classList.toggle('on',G.auto); $('auto').textContent=G.auto?'自动轮播 · '+m.left+'s':'自动轮播 (关)';
   $('black').classList.toggle('on',G.dim<.01); $('hud').classList.toggle('on',G.hud); $('rec').classList.toggle('on',m.rec);
-  $('status').textContent=`已连接 · ${m.w}×${m.h} · ${m.fps} fps · ${m.n} strings`;
+  $('status').textContent=`${TD?'TD 实时输出':'已连接'} · ${m.w}×${m.h} · ${m.fps} fps · ${m.n} strings`;
 };
 
 // ---------- MIDI: CC → slider (absolute), CC/note → button ----------
